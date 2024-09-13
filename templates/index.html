@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Image Classifier</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: url('https://www.example.com/ai-background.jpg') no-repeat center center fixed;
+            background-size: cover;
+            color: #fff;
+        }
+        .container {
+            margin-top: 50px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 20px;
+            border-radius: 8px;
+        }
+        #videoContainer {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+        }
+        #video {
+            width: 100%;
+            height: auto;
+            border-radius: 8px;
+            border: 2px solid #ddd;
+        }
+        #imageOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 8px;
+            display: none;
+        }
+        #imagePreview {
+            max-width: 100%;
+            height: auto;
+            margin-top: 20px;
+            display: none;
+        }
+        #uploadImg {
+            display: none;
+        }
+        #result {
+            margin-top: 20px;
+            display: none;
+        }
+        .btn-custom {
+            margin-top: 10px;
+        }
+        .btn-group {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container text-center">
+        <h1 class="mb-4">AI Image Classifier</h1>
+        <p class="lead">Use the live feed or upload an image for predictions!</p>
+
+        <!-- Buttons to switch between functionalities -->
+        <div class="btn-group mb-4">
+            <button id="videoFeedBtn" class="btn btn-primary">Live Video Feed</button>
+            <button id="uploadBtn" class="btn btn-info">Upload Image</button>
+        </div>
+
+        <!-- Live Video Feed Section -->
+        <div id="videoContainer" class="text-center">
+            <video id="video" autoplay></video>
+            <canvas id="imageOverlay"></canvas>
+            <button id="snapBtn" class="btn btn-warning btn-custom">Capture Image</button>
+        </div>
+
+        <!-- Image Preview for Captured or Uploaded Images -->
+        <img id="imagePreview" class="img-fluid" alt="Captured or Uploaded Image">
+
+        <!-- Upload Image Input -->
+        <form method="POST" enctype="multipart/form-data" id="uploadImgForm" class="mt-4">
+            <input type="file" id="uploadImg" name="file" accept="image/*">
+            <button type="submit" class="btn btn-primary btn-custom">Predict</button>
+        </form>
+
+        <!-- Result Section -->
+        <div id="result" class="alert alert-info">
+            <h3 id="predictionClass"></h3>
+            <p id="confidence"></p>
+            <p id="age"></p>
+            <p id="emotion"></p>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const video = document.getElementById('video');
+        const videoContainer = document.getElementById('videoContainer');
+        const snapBtn = document.getElementById('snapBtn');
+        const imagePreview = document.getElementById('imagePreview');
+        const uploadImg = document.getElementById('uploadImg');
+        const uploadImgForm = document.getElementById('uploadImgForm');
+        const result = document.getElementById('result');
+        const predictionClass = document.getElementById('predictionClass');
+        const confidence = document.getElementById('confidence');
+        const age = document.getElementById('age');
+        const emotion = document.getElementById('emotion');
+        const imageOverlay = document.getElementById('imageOverlay');
+
+        // Handle switching between functionalities
+        document.getElementById('videoFeedBtn').addEventListener('click', () => {
+            videoContainer.style.display = 'block';
+            uploadImg.style.display = 'none';
+            imagePreview.style.display = 'none';
+            result.style.display = 'none';
+            imageOverlay.style.display = 'none';
+            startVideo();
+        });
+
+        document.getElementById('uploadBtn').addEventListener('click', () => {
+            videoContainer.style.display = 'none';
+            imagePreview.style.display = 'none';
+            result.style.display = 'none';
+            uploadImg.style.display = 'block';
+            imageOverlay.style.display = 'none';
+            stopVideo();
+        });
+
+        // Function to start video streaming
+        function startVideo() {
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(stream => {
+                    video.srcObject = stream;
+                });
+        }
+
+        // Stop video stream
+        function stopVideo() {
+            const stream = video.srcObject;
+            const tracks = stream ? stream.getTracks() : [];
+            tracks.forEach(track => track.stop());
+        }
+
+        // Capture Image from Video
+        snapBtn.addEventListener('click', () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const imageDataURL = canvas.toDataURL('image/png');
+
+            // Display the captured image on the overlay
+            imageOverlay.width = canvas.width;
+            imageOverlay.height = canvas.height;
+            const context = imageOverlay.getContext('2d');
+            context.drawImage(canvas, 0, 0);
+            imageOverlay.style.display = 'block';
+
+            // Send captured image to the server
+            fetch('/predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ file: imageDataURL })
+            })
+            .then(response => response.json())
+            .then(data => {
+                predictionClass.innerText = `Predicted Class: ${data.class_name}`;
+                confidence.innerText = `Confidence: ${data.confidence}%`;
+                age.innerText = `Age: ${data.age}`;
+                emotion.innerText = `Emotion: ${data.emotion}`;
+                result.style.display = 'block';
+            })
+            .catch(err => console.error('Error:', err));
+        });
+
+        // Handle Upload Image
+        uploadImgForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+
+            fetch('/predict', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                predictionClass.innerText = `Predicted Class: ${data.class_name}`;
+                confidence.innerText = `Confidence: ${data.confidence}%`;
+                age.innerText = `Age: ${data.age}`;
+                emotion.innerText = `Emotion: ${data.emotion}`;
+                result.style.display = 'block';
+            })
+            .catch(err => console.error('Error:', err));
+        });
+    </script>
+</body>
+</html>
